@@ -1,0 +1,37 @@
+# ── Stage: runtime ────────────────────────────────────────────────────────────
+FROM python:3.13-slim
+
+# System deps needed by psycopg2-binary and general build
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        gcc \
+        libpq-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+# Install Python dependencies first (layer cache)
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt gunicorn
+
+# Copy entire project (all packages needed by api_server.py)
+COPY api_server.py .
+COPY db.py .
+COPY shared/          shared/
+COPY skill_intelligence_service/ skill_intelligence_service/
+COPY skill_graph_engine/         skill_graph_engine/
+COPY skill_validation_service/   skill_validation_service/
+
+# Never run as root inside the container
+RUN useradd -m appuser
+USER appuser
+
+EXPOSE 5000
+
+# 4 Gunicorn workers — handles ThreadPoolExecutor inside routes correctly
+CMD ["gunicorn", "api_server:app", \
+     "--bind", "0.0.0.0:5000", \
+     "--workers", "4", \
+     "--threads", "2", \
+     "--timeout", "120", \
+     "--access-logfile", "-", \
+     "--error-logfile", "-"]

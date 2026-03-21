@@ -1,0 +1,35 @@
+# Git
+.git
+.gitignore
+
+# Python packages — not needed in the frontend image
+shared/
+skill_intelligence_service/
+skill_graph_engine/
+skill_validation_service/
+*.py
+requirements.txt
+db.py
+api_server.py
+main.py
+
+# Virtual environments
+.venv
+venv
+env
+
+# Environment files
+.env
+*.env
+
+# Docker files
+Dockerfile*
+docker-compose*.yml
+
+# Database
+database/
+
+# Docs / misc
+*.md
+.DS_Store
+Thumbs.db

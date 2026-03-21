@@ -36,21 +36,21 @@ async function request<T>(endpoint: string, body: unknown): Promise<T> {
 
 export const api = {
   analyzeProfile: (resume: string, jd: string) =>
-    middlewareApi.analyzeProfile({ resume, jd }),
+    request("/analyze-profile", { resume, jd }),
 
   generateTest: (skills: string[]) =>
-    middlewareApi.generateTest({ skills }),
+    request("/generate-test", { skills }),
 
   evaluateTest: (answers: Record<string, string>) =>
-    middlewareApi.evaluateTest({ answers }),
+    request("/evaluate-test", { answers }),
 
   computePath: (data: {
     skills: string[];
     proficiency: Record<string, number>;
     importance_scores: Record<string, number>;
     user_confidence: Record<string, number>;
-  }) => middlewareApi.computePath(data),
+  }) => request("/compute-path", data),
 
   chat: (message: string, context?: unknown) =>
-    middlewareApi.chat({ message, context }),
+    request<{ response: string }>("/chat", { message, context }),
 };

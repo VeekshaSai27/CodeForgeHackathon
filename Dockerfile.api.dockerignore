@@ -1,0 +1,36 @@
+# Git
+.git
+.gitignore
+
+# Python caches
+__pycache__
+*.py[cod]
+*.pyo
+.pytest_cache
+.mypy_cache
+
+# Virtual environments
+.venv
+venv
+env
+
+# Environment files — injected at runtime, never baked into image
+.env
+*.env
+
+# Frontend — not needed in the api image
+frontend/
+node_modules/
+
+# Docker files themselves
+Dockerfile*
+docker-compose*.yml
+nginx.conf
+
+# Database migrations (mounted as volume, not copied)
+database/
+
+# Docs / misc
+*.md
+.DS_Store
+Thumbs.db

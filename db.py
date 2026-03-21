@@ -14,18 +14,21 @@ import psycopg2.extras
 
 from skill_intelligence_service.models import SkillDNA
 
-_DSN = (
-    f"host={os.getenv('POSTGRES_HOST', 'localhost')} "
-    f"port={os.getenv('POSTGRES_PORT', '5432')} "
-    f"dbname={os.getenv('POSTGRES_DB', 'skill_platform')} "
-    f"user={os.getenv('POSTGRES_USER', 'skill_user')} "
-    f"password={os.getenv('POSTGRES_PASSWORD', 'changeme')}"
-)
+
+def _build_dsn() -> str:
+    """Build DSN at call time so Docker-injected env vars are always read."""
+    return (
+        f"host={os.getenv('POSTGRES_HOST', 'localhost')} "
+        f"port={os.getenv('POSTGRES_PORT', '5432')} "
+        f"dbname={os.getenv('POSTGRES_DB', 'skill_platform')} "
+        f"user={os.getenv('POSTGRES_USER', 'skill_user')} "
+        f"password={os.getenv('POSTGRES_PASSWORD', 'changeme')}"
+    )
 
 
 @contextmanager
 def get_conn():
-    conn = psycopg2.connect(_DSN)
+    conn = psycopg2.connect(_build_dsn())
     try:
         yield conn
         conn.commit()
@@ -41,7 +44,6 @@ def get_conn():
 # ---------------------------------------------------------------------------
 
 def _upsert_skill(cur, name: str) -> str:
-    """Insert skill if not exists, return its UUID."""
     cur.execute(
         """
         INSERT INTO skills (name)
@@ -59,10 +61,6 @@ def _upsert_skill(cur, name: str) -> str:
 # ---------------------------------------------------------------------------
 
 def persist_analysis(conn, skill_dna: SkillDNA) -> None:
-    """
-    Upsert skills and log them to system_logs.
-    (user_skills requires a real user_id — logged here for observability only)
-    """
     with conn.cursor() as cur:
         for skill in skill_dna.skills:
             _upsert_skill(cur, skill)
@@ -85,10 +83,6 @@ def persist_analysis(conn, skill_dna: SkillDNA) -> None:
 
 
 def persist_assessment(conn, rows: list[dict]) -> None:
-    """
-    Log assessment results to system_logs.
-    (assessments table requires user_id — full persistence needs auth layer)
-    """
     with conn.cursor() as cur:
         cur.execute(
             """
@@ -104,7 +98,6 @@ def persist_assessment(conn, rows: list[dict]) -> None:
 
 
 def persist_learning_path(conn, path_items: list[dict]) -> None:
-    """Log computed learning path to system_logs."""
     with conn.cursor() as cur:
         cur.execute(
             """
