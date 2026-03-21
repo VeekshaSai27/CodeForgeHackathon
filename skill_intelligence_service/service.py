@@ -1,42 +1,22 @@
 import json
-import os
 import re
 
 from dotenv import load_dotenv
-import google.generativeai as genai
 
 load_dotenv()
 
 from .models import SkillDNA
 from .prompts import SKILL_EXTRACTION_PROMPT
-
-genai.configure(api_key=os.environ["GEMINI_API_KEY"])
-_model = genai.GenerativeModel(
-    model_name="gemini-2.5-flash-lite",
-    generation_config=genai.GenerationConfig(
-        temperature=0.2,
-        response_mime_type="application/json",
-    ),
-)
+from shared.gemini_pool import generate_with_retry
 
 
 def build_skill_dna(resume: str, jd: str) -> SkillDNA:
-    """
-    Extract, normalize, and score skills from a resume and job description.
-
-    Args:
-        resume: Raw resume text (can be empty or vague).
-        jd:     Raw job description text (can be empty or vague).
-
-    Returns:
-        Validated SkillDNA profile.
-    """
     prompt = SKILL_EXTRACTION_PROMPT.format(
         resume=resume.strip() or "Not provided.",
         jd=jd.strip() or "Not provided.",
     )
-    response = _model.generate_content(prompt)
-    return _parse_and_validate(response.text)
+    raw = generate_with_retry(prompt, temperature=0.2)
+    return _parse_and_validate(raw)
 
 
 def _parse_and_validate(raw: str) -> SkillDNA:

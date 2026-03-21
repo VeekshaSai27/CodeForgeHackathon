@@ -1,11 +1,11 @@
 import json
-from services.gemini_service import generate_response
+from skill_validation_service.services.gemini_service import generate_response
 
 
 def safe_json_parse(text):
     try:
         return json.loads(text)
-    except:
+    except Exception:
         start = text.find("[")
         end = text.rfind("]") + 1
         return json.loads(text[start:end])
@@ -35,6 +35,5 @@ def generate_questions(skill):
       }}
     ]
     """
-
     response = generate_response(prompt)
     return safe_json_parse(response)

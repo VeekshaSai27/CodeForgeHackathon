@@ -1,16 +1,37 @@
-const API_BASE = import.meta.env.VITE_API_URL || "http://localhost:5000";
+const API_BASE = import.meta.env.VITE_API_URL || "";
+
+const SESSION_HEADER = "X-Session-Token";
+
+function getToken(): string | null {
+  return sessionStorage.getItem(SESSION_HEADER);
+}
+
+function saveToken(res: Record<string, unknown>) {
+  const token = res[SESSION_HEADER];
+  if (typeof token === "string") {
+    sessionStorage.setItem(SESSION_HEADER, token);
+  }
+}
 
 async function request<T>(endpoint: string, body: unknown): Promise<T> {
+  const headers: Record<string, string> = { "Content-Type": "application/json" };
+  const token = getToken();
+  if (token) headers[SESSION_HEADER] = token;
+
   const res = await fetch(`${API_BASE}${endpoint}`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers,
     body: JSON.stringify(body),
   });
+
   if (!res.ok) {
     const text = await res.text();
     throw new Error(`API error ${res.status}: ${text}`);
   }
-  return res.json();
+
+  const data = await res.json();
+  saveToken(data);
+  return data as T;
 }
 
 export const api = {

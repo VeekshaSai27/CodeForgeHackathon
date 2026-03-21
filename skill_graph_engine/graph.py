@@ -1,23 +1,13 @@
 import json
-import os
 import re
 
 import networkx as nx
 from dotenv import load_dotenv
-import google.generativeai as genai
 
 from .base_graph import build_base_graph
+from shared.gemini_pool import generate_with_retry
 
 load_dotenv()
-
-genai.configure(api_key=os.environ["GEMINI_API_KEY"])
-_model = genai.GenerativeModel(
-    model_name="gemini-2.5-flash-lite",
-    generation_config=genai.GenerationConfig(
-        temperature=0.2,
-        response_mime_type="application/json",
-    ),
-)
 
 _EXPANSION_PROMPT = """
 You are a skill dependency expert.
@@ -46,13 +36,6 @@ def build_graph(
     confidence: dict[str, float],
     proficiency: dict[str, float],
 ) -> nx.DiGraph:
-    """
-    Build the full skill graph by:
-    1. Starting from the base graph
-    2. Merging SkillDNA importance + confidence onto existing nodes
-    3. Merging proficiency onto nodes
-    4. Expanding graph via Gemini for any unknown skills
-    """
     G = build_base_graph()
 
     all_skills = set(importance.keys()) | set(confidence.keys()) | set(proficiency.keys())
@@ -77,21 +60,20 @@ def build_graph(
 
 
 def _expand_graph(G: nx.DiGraph, unknown: set[str], known: set[str]) -> None:
-    """Call Gemini to infer nodes and edges for unknown skills, then add to graph."""
     prompt = _EXPANSION_PROMPT.format(
         known_skills=sorted(known),
         unknown_skills=sorted(unknown),
     )
 
     try:
-        response = _model.generate_content(prompt)
-        data = _parse_expansion(response.text)
+        raw = generate_with_retry(prompt, temperature=0.2)
+        data = _parse_expansion(raw)
 
         for node in data.get("nodes", []):
             skill = node["skill"]
-            importance = float(node.get("importance", 0.5))
+            imp = float(node.get("importance", 0.5))
             if skill not in G:
-                G.add_node(skill, importance=importance, proficiency=0.0, confidence=0.0)
+                G.add_node(skill, importance=imp, proficiency=0.0, confidence=0.0)
 
         for edge in data.get("edges", []):
             src, dst = edge["from"], edge["to"]
