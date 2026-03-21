@@ -10,6 +10,10 @@ export interface QuizQuestion {
   question: string;
   options: string[];
   correct_answer?: string;
+  // Defaults to "mcq" when undefined for backward compatibility
+  type?: "mcq" | "coding";
+  starterCode?: string;
+  language?: string;
 }
 
 export interface EvaluateTestResponse {
