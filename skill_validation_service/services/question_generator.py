@@ -36,18 +36,13 @@ def generate_questions(skill: str) -> list:
     """
     questions = []
 
-    # Round 1: 3 easy MCQs
     easy_qs = _fetch_questions(skill, "easy", 3, "mcq")
     questions.extend(easy_qs[:3])
 
-    # Simulate correctness history from easy round (assume 0 known at generation time)
-    # Adaptive difficulty is resolved at quiz-time via get_next_difficulty;
-    # at generation time we pre-generate both medium and hard and tag them.
     next_diff = get_next_difficulty([])  # defaults to "medium" for fresh users
     mid_qs = _fetch_questions(skill, next_diff, 3, "mcq")
     questions.extend(mid_qs[:3])
 
-    # Round 3: 2 coding questions (always medium difficulty)
     coding_qs = _fetch_questions(skill, "medium", 2, "coding")
     questions.extend(coding_qs[:2])
 

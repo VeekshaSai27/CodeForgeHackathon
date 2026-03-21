@@ -8,7 +8,6 @@ def evaluate(questions, answers):
     for q, ans in zip(questions, answers):
         q_type = q.get("type", "mcq")
         if q_type == "coding":
-            # Coding: any non-empty submission counts as attempted (medium weight)
             is_correct = bool(ans and ans.strip())
         else:
             is_correct = ans == q["answer"]
