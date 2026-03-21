@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { StepIndicator } from "@/components/StepIndicator";
 import { useOnboarding } from "@/context/OnboardingContext";
 import { api } from "@/lib/api";
+import { runCode } from "@/lib/codeRunner";
 import type { QuizQuestion, EvaluateTestResponse } from "@/types/onboarding";
 
 const STEPS = ["Upload", "Quiz", "Dashboard"];
@@ -15,6 +16,7 @@ export default function QuizPage() {
   const [questions, setQuestions] = useState<QuizQuestion[]>([]);
   const [currentIdx, setCurrentIdx] = useState(0);
   const [answers, setAnswers] = useState<Record<string, string>>({});
+  const [codeOutputs, setCodeOutputs] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
@@ -27,8 +29,9 @@ export default function QuizPage() {
 
     const load = async () => {
       try {
-        const data = await api.generateTest(skills) as { questions: QuizQuestion[] };
-        setQuestions(data.questions || []);
+        const data = (await api.generateTest(skills)) as { questions: QuizQuestion[] };
+        const limitedQuestions = (data.questions || []).slice(0, 25);
+        setQuestions(limitedQuestions);
       } catch (err) {
         setError(err instanceof Error ? err.message : "Failed to load quiz.");
       } finally {
@@ -46,6 +49,18 @@ export default function QuizPage() {
   const selectOption = (option: string) => {
     if (!current) return;
     setAnswers((prev) => ({ ...prev, [current.id]: option }));
+  };
+
+  const handleCodeChange = (code: string) => {
+    if (!current) return;
+    setAnswers((prev) => ({ ...prev, [current.id]: code }));
+  };
+
+  const handleRunCode = () => {
+    if (!current) return;
+    const code = answers[current.id] ?? current.starterCode ?? "";
+    const output = runCode(code);
+    setCodeOutputs((prev) => ({ ...prev, [current.id]: output }));
   };
 
   const handleNext = async () => {
@@ -116,34 +131,60 @@ export default function QuizPage() {
               <h2 className="text-balance mt-2 text-lg font-semibold text-foreground sm:text-xl" style={{ lineHeight: "1.25" }}>
                 {current.question}
               </h2>
-
-              <div className="mt-6 space-y-3">
-                {current.options.map((opt) => {
-                  const selected = selectedAnswer === opt;
-                  return (
-                    <button
-                      key={opt}
-                      onClick={() => selectOption(opt)}
-                      className={`w-full rounded-lg border px-4 py-3.5 text-left text-sm font-medium transition-all active:scale-[0.98] ${
-                        selected
-                          ? "border-primary bg-primary/5 text-foreground ring-2 ring-primary/20"
-                          : "border-border bg-card text-foreground hover:border-primary/30 hover:bg-muted/50"
-                      }`}
-                    >
-                      <div className="flex items-center gap-3">
-                        <div
-                          className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full border-2 transition-colors ${
-                            selected ? "border-primary bg-primary" : "border-muted-foreground/30"
-                          }`}
-                        >
-                          {selected && <CheckCircle2 className="h-3 w-3 text-primary-foreground" />}
+              {(!current.type || current.type === "mcq") && (
+                <div className="mt-6 space-y-3">
+                  {current.options.map((opt) => {
+                    const selected = selectedAnswer === opt;
+                    return (
+                      <button
+                        key={opt}
+                        onClick={() => selectOption(opt)}
+                        className={`w-full rounded-lg border px-4 py-3.5 text-left text-sm font-medium transition-all active:scale-[0.98] ${
+                          selected
+                            ? "border-primary bg-primary/5 text-foreground ring-2 ring-primary/20"
+                            : "border-border bg-card text-foreground hover:border-primary/30 hover:bg-muted/50"
+                        }`}
+                      >
+                        <div className="flex items-center gap-3">
+                          <div
+                            className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full border-2 transition-colors ${
+                              selected ? "border-primary bg-primary" : "border-muted-foreground/30"
+                            }`}
+                          >
+                            {selected && <CheckCircle2 className="h-3 w-3 text-primary-foreground" />}
+                          </div>
+                          {opt}
                         </div>
-                        {opt}
-                      </div>
-                    </button>
-                  );
-                })}
-              </div>
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+
+              {current.type === "coding" && (
+                <div className="mt-6 space-y-4">
+                  <textarea
+                    className="min-h-[200px] w-full rounded-md border bg-muted/40 p-3 font-mono text-sm outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                    value={answers[current.id] ?? current.starterCode ?? ""}
+                    onChange={(e) => handleCodeChange(e.target.value)}
+                    spellCheck={false}
+                  />
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-xs text-muted-foreground">
+                      Language: {current.language || "javascript"}
+                    </span>
+                    <Button type="button" variant="outline" size="sm" onClick={handleRunCode}>
+                      Run Code
+                    </Button>
+                  </div>
+                  <div className="rounded-md border bg-muted/40 p-3">
+                    <div className="mb-1 text-xs font-medium text-muted-foreground">Output</div>
+                    <pre className="max-h-40 overflow-auto whitespace-pre-wrap break-words text-xs font-mono text-foreground">
+                      {codeOutputs[current.id] || "(no output yet)"}
+                    </pre>
+                  </div>
+                </div>
+              )}
             </div>
 
             <div className="mt-6 flex justify-end">
