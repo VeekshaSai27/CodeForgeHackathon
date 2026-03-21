@@ -1,0 +1,2 @@
+I have experience in Python, Pandas, and basic Machine Learning.
+Built projects using NumPy and data analysis.
