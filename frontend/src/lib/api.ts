@@ -1,35 +1,28 @@
-const API_BASE = import.meta.env.VITE_API_URL || "http://localhost:5000";
+// Public API surface for the frontend.
+// This file exposes a stable interface used by components, while
+// internally delegating to the middleware API layer. The middleware
+// service is responsible for talking to external providers and
+// keeping API keys/credentials on the server side only.
 
-async function request<T>(endpoint: string, body: unknown): Promise<T> {
-  const res = await fetch(`${API_BASE}${endpoint}`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
-  });
-  if (!res.ok) {
-    const text = await res.text();
-    throw new Error(`API error ${res.status}: ${text}`);
-  }
-  return res.json();
-}
+import { middlewareApi } from "./middlewareApi";
 
 export const api = {
   analyzeProfile: (resume: string, jd: string) =>
-    request("/analyze-profile", { resume, jd }),
+    middlewareApi.analyzeProfile({ resume, jd }),
 
   generateTest: (skills: string[]) =>
-    request("/generate-test", { skills }),
+    middlewareApi.generateTest({ skills }),
 
   evaluateTest: (answers: Record<string, string>) =>
-    request("/evaluate-test", { answers }),
+    middlewareApi.evaluateTest({ answers }),
 
   computePath: (data: {
     skills: string[];
     proficiency: Record<string, number>;
     importance_scores: Record<string, number>;
     user_confidence: Record<string, number>;
-  }) => request("/compute-path", data),
+  }) => middlewareApi.computePath(data),
 
   chat: (message: string, context?: unknown) =>
-    request<{ response: string }>("/chat", { message, context }),
+    middlewareApi.chat({ message, context }),
 };
