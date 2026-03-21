@@ -7,6 +7,7 @@ import { StepIndicator } from "@/components/StepIndicator";
 import { useOnboarding } from "@/context/OnboardingContext";
 import { api } from "@/lib/api";
 import { runCode } from "@/lib/codeRunner";
+import { warmupPyodide } from "@/lib/pyodideWorker";
 import type { QuizQuestion, EvaluateTestResponse } from "@/types/onboarding";
 
 const STEPS = ["Upload", "Quiz", "Dashboard"];
@@ -19,6 +20,8 @@ export default function QuizPage() {
   const [answers, setAnswers] = useState<Record<string, string>>({});
   const [codeOutputs, setCodeOutputs] = useState<Record<string, string>>({});
   const [codeRunning, setCodeRunning] = useState(false);
+  const [pyodideReady, setPyodideReady] = useState(false);
+  const [pyodideLoading, setPyodideLoading] = useState(false);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
@@ -48,6 +51,16 @@ export default function QuizPage() {
   const isLast = currentIdx === questions.length - 1;
   const selectedAnswer = current ? answers[current.id] : undefined;
   const isCoding = current?.type === "coding";
+
+  // Preload Pyodide as soon as a coding question is visible
+  useEffect(() => {
+    if (!isCoding || pyodideReady || pyodideLoading) return;
+    setPyodideLoading(true);
+    warmupPyodide()
+      .then(() => setPyodideReady(true))
+      .catch(() => setPyodideReady(true)) // allow attempt even if warmup failed
+      .finally(() => setPyodideLoading(false));
+  }, [isCoding, pyodideReady, pyodideLoading]);
   const canProceed = isCoding
     ? !!(answers[current?.id ?? ""]?.trim())
     : !!selectedAnswer;
@@ -183,8 +196,13 @@ export default function QuizPage() {
                     <span className="text-xs text-muted-foreground">
                       Language: {current.language || "javascript"}
                     </span>
-                    <Button type="button" variant="outline" size="sm" onClick={handleRunCode} disabled={codeRunning}>
-                      {codeRunning ? <><Loader2 className="mr-1 h-3 w-3 animate-spin" />Running…</> : "Run Code"}
+                    <Button type="button" variant="outline" size="sm" onClick={handleRunCode} disabled={codeRunning || pyodideLoading}>
+                      {pyodideLoading
+                        ? <><Loader2 className="mr-1 h-3 w-3 animate-spin" />Loading Python…</>
+                        : codeRunning
+                        ? <><Loader2 className="mr-1 h-3 w-3 animate-spin" />Running…</>
+                        : "Run Code"
+                      }
                     </Button>
                   </div>
                   <div className="rounded-md border bg-muted/40 p-3">

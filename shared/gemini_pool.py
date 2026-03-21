@@ -13,18 +13,23 @@ import time
 
 from google import genai
 from google.genai import types
-from google.genai.errors import ClientError
+from google.genai.errors import ClientError, ServerError
 
 try:
-    from google.api_core.exceptions import ResourceExhausted
+    from google.api_core.exceptions import ResourceExhausted, ServiceUnavailable
 except ImportError:
     ResourceExhausted = None
+    ServiceUnavailable = None
 
 
-def _is_rate_limit(exc: Exception) -> bool:
+def _is_retryable(exc: Exception) -> bool:
     if ResourceExhausted and isinstance(exc, ResourceExhausted):
         return True
+    if ServiceUnavailable and isinstance(exc, ServiceUnavailable):
+        return True
     if isinstance(exc, ClientError) and getattr(exc, "code", None) == 429:
+        return True
+    if isinstance(exc, ServerError) and getattr(exc, "code", None) == 503:
         return True
     return False
 
@@ -81,8 +86,9 @@ def generate_with_retry(
     """
     keys = _get_keys()
     last_exc = None
+    max_attempts = max(len(keys) * 3, 5)  # retry each key up to 3x for 503s
 
-    for attempt in range(len(keys)):
+    for attempt in range(max_attempts):
         try:
             client = genai.Client(api_key=_next_key())
             response = client.models.generate_content(
@@ -95,12 +101,12 @@ def generate_with_retry(
             )
             return response.text
         except Exception as e:
-            if _is_rate_limit(e):
+            if _is_retryable(e):
                 last_exc = e
-                time.sleep(2 ** attempt)
+                time.sleep(min(2 ** attempt, 15))
             else:
                 raise
 
     raise RuntimeError(
-        f"All {len(keys)} Gemini API key(s) exhausted (rate limited). Last error: {last_exc}"
+        f"All {len(keys)} Gemini API key(s) exhausted or unavailable. Last error: {last_exc}"
     )

@@ -27,11 +27,11 @@ USER appuser
 
 EXPOSE 5000
 
-# 4 Gunicorn workers — handles ThreadPoolExecutor inside routes correctly
+# Single worker with multiple threads — keeps _sessions dict shared across all requests
 CMD ["gunicorn", "api_server:app", \
      "--bind", "0.0.0.0:5000", \
-     "--workers", "4", \
-     "--threads", "2", \
-     "--timeout", "120", \
+     "--workers", "1", \
+     "--threads", "8", \
+     "--timeout", "300", \
      "--access-logfile", "-", \
      "--error-logfile", "-"]

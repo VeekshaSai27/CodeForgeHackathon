@@ -10,10 +10,14 @@ async function init() {
 const ready = init();
 
 self.onmessage = async (e) => {
+  if (e.data.type === "warmup") {
+    await ready;
+    self.postMessage({ type: "ready" });
+    return;
+  }
   await ready;
   const { id, code } = e.data;
   try {
-    // Capture stdout
     pyodide.runPython(\`
 import sys, io
 _stdout = io.StringIO()
@@ -38,15 +42,41 @@ let _id = 0;
 const pending = new Map<number, (output: string) => void>();
 
 worker.onmessage = (e) => {
+  if (e.data.type === "ready") {
+    pending.get(-1)?.("ready");
+    pending.delete(-1);
+    return;
+  }
   const { id, output } = e.data;
   pending.get(id)?.(output);
   pending.delete(id);
 };
 
+export function warmupPyodide(): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const timeout = setTimeout(() => {
+      pending.delete(-1);
+      reject(new Error("Pyodide load timed out (30s)"));
+    }, 30000);
+    pending.set(-1, () => {
+      clearTimeout(timeout);
+      resolve();
+    });
+    worker.postMessage({ type: "warmup" });
+  });
+}
+
 export function runPython(code: string): Promise<string> {
   return new Promise((resolve) => {
     const id = _id++;
-    pending.set(id, resolve);
+    const timeout = setTimeout(() => {
+      pending.delete(id);
+      resolve("Error: Execution timed out (10s)");
+    }, 10000);
+    pending.set(id, (output) => {
+      clearTimeout(timeout);
+      resolve(output);
+    });
     worker.postMessage({ id, code });
   });
 }

@@ -6,6 +6,10 @@ import { StepIndicator } from "@/components/StepIndicator";
 import { useOnboarding } from "@/context/OnboardingContext";
 import { api } from "@/lib/api";
 import type { AnalyzeProfileResponse } from "@/types/onboarding";
+import * as pdfjs from "pdfjs-dist";
+import mammoth from "mammoth";
+
+pdfjs.GlobalWorkerOptions.workerSrc = `https://cdn.jsdelivr.net/npm/pdfjs-dist@${pdfjs.version}/build/pdf.worker.min.mjs`;
 
 const STEPS = ["Upload", "Quiz", "Dashboard"];
 
@@ -21,8 +25,31 @@ export default function UploadPage() {
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    const text = await file.text();
-    setResume(text);
+    try {
+      const ext = file.name.split(".").pop()?.toLowerCase();
+      if (ext === "pdf") {
+        const buffer = await file.arrayBuffer();
+        const pdf = await pdfjs.getDocument({ data: buffer }).promise;
+        const pages = await Promise.all(
+          Array.from({ length: pdf.numPages }, (_, i) =>
+            pdf.getPage(i + 1).then((p) => p.getTextContent())
+          )
+        );
+        const text = pages
+          .flatMap((p) => p.items.map((item: any) => item.str))
+          .join(" ");
+        setResume(text);
+      } else if (ext === "docx") {
+        const buffer = await file.arrayBuffer();
+        const { value } = await mammoth.extractRawText({ arrayBuffer: buffer });
+        setResume(value);
+      } else {
+        setResume(await file.text());
+      }
+    } catch (err) {
+      console.error("File parse error:", err);
+      setError("Could not read file. Please paste your resume as text instead.");
+    }
   };
 
   const handleAnalyze = async () => {
@@ -80,7 +107,7 @@ export default function UploadPage() {
               <input
                 ref={fileRef}
                 type="file"
-                accept=".txt,.pdf,.doc,.docx"
+                accept=".txt,.pdf,.docx"
                 onChange={handleFileUpload}
                 className="hidden"
               />

@@ -13,7 +13,6 @@ import os
 import sys
 import uuid
 import threading
-from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from dotenv import load_dotenv
 
@@ -28,7 +27,7 @@ from flask_limiter.util import get_remote_address
 
 from skill_intelligence_service import build_skill_dna
 from skill_graph_engine import run_engine
-from skill_validation_service.services.question_generator import generate_questions
+from skill_validation_service.services.question_generator import generate_questions_batch
 from skill_validation_service.services.evaluation_engine import evaluate
 from skill_validation_service.services.confidence_engine import calculate_confidence
 from shared.gemini_pool import generate_with_retry
@@ -70,6 +69,16 @@ def _session_response(token: str, data: dict) -> dict:
     return {SESSION_HEADER: token, **data}
 
 
+_PYTHON_SKILLS = {
+    "python", "pandas", "numpy", "scikit-learn", "tensorflow", "pytorch",
+    "keras", "flask", "django", "fastapi", "machine learning", "deep learning",
+    "data science", "nlp", "computer vision", "matplotlib", "scipy",
+}
+
+def _infer_language(skill: str) -> str:
+    return "python" if skill.lower() in _PYTHON_SKILLS else "javascript"
+
+
 # ---------------------------------------------------------------------------
 # Routes
 # ---------------------------------------------------------------------------
@@ -82,7 +91,13 @@ def analyze_profile():
     resume: str = body.get("resume", "")
     jd: str = body.get("jd", "")
 
-    skill_dna = build_skill_dna(resume=resume, jd=jd)
+    try:
+        skill_dna = build_skill_dna(resume=resume, jd=jd)
+    except RuntimeError as e:
+        msg = str(e)
+        if "unavailable" in msg.lower() or "exhausted" in msg.lower():
+            return jsonify({"error": "Gemini is temporarily unavailable or quota exceeded. Please try again in a moment."}), 503
+        raise
     session["skill_dna"] = skill_dna
     session["proficiency"] = {}
 
@@ -114,16 +129,12 @@ def generate_test():
     if not skills:
         return jsonify({"error": "No skills provided and no active session found."}), 400
 
-    skill_questions: dict[str, list] = {}
-    with ThreadPoolExecutor(max_workers=min(len(skills), 5)) as pool:
-        futures = {pool.submit(generate_questions, skill): skill for skill in skills}
-        for future in as_completed(futures):
-            skill = futures[future]
-            try:
-                skill_questions[skill] = future.result() or []
-            except Exception as e:
-                app.logger.warning(f"Question generation failed for {skill}: {e}")
-                skill_questions[skill] = []
+    try:
+        skill_questions = generate_questions_batch(skills)
+        skill_questions = {s: (qs or []) for s, qs in skill_questions.items()}
+    except Exception as e:
+        app.logger.warning(f"Batch question generation failed: {e}")
+        skill_questions = {skill: [] for skill in skills}
 
     session["skill_questions"] = skill_questions
 
@@ -143,7 +154,7 @@ def generate_test():
             }
             if q_type == "coding":
                 entry["starterCode"] = q.get("starterCode", "")
-                entry["language"] = q.get("language", "javascript")
+                entry["language"] = q.get("language") or _infer_language(skill)
             flat.append(entry)
 
     return jsonify(_session_response(token, {"questions": flat}))
