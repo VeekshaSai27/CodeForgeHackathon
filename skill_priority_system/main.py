@@ -15,13 +15,10 @@ jd_skills = extract_skills_from_text(jd_text, mode="jd")
 print("\nResume Skills:", resume_skills)
 print("JD Skills:", jd_skills)
 
-# Feature Engineering
 data = compute_features(resume_skills, jd_skills)
 
-# Train Model
 model, scaler, df = train_model(data)
 
-# Compute Scores
 df_ranked = compute_scores(df, model)
 
 print("\n🔥 Top Skills to Learn:\n")

@@ -25,7 +25,6 @@ def compute_features(resume_skills, jd_skills):
         # Dependency
         dependency = dependency_dict.get(skill, 0.4)
 
-        # Label (for training)
         label = 1 if importance > 0.6 and gap > 0.5 else 0
 
         data.append({
