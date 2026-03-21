@@ -13,10 +13,20 @@ import time
 
 from google import genai
 from google.genai import types
+from google.genai.errors import ClientError
+
 try:
     from google.api_core.exceptions import ResourceExhausted
 except ImportError:
-    from google.genai.errors import ClientError as ResourceExhausted
+    ResourceExhausted = None
+
+
+def _is_rate_limit(exc: Exception) -> bool:
+    if ResourceExhausted and isinstance(exc, ResourceExhausted):
+        return True
+    if isinstance(exc, ClientError) and getattr(exc, "code", None) == 429:
+        return True
+    return False
 
 _lock = threading.Lock()
 _index = 0
@@ -84,11 +94,12 @@ def generate_with_retry(
                 ),
             )
             return response.text
-        except ResourceExhausted as e:
-            last_exc = e
-            time.sleep(2 ** attempt)  # 1s, 2s, 4s …
-        except Exception:
-            raise
+        except Exception as e:
+            if _is_rate_limit(e):
+                last_exc = e
+                time.sleep(2 ** attempt)
+            else:
+                raise
 
     raise RuntimeError(
         f"All {len(keys)} Gemini API key(s) exhausted (rate limited). Last error: {last_exc}"

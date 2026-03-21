@@ -67,6 +67,7 @@ def select_next_skills(
 def run_selection(
     G: nx.DiGraph,
     reasoning: dict[str, str],
+    weights: dict[str, float],
     top_k: int = 3,
 ) -> tuple[list[str], list[RoadmapItem]]:
     """
@@ -79,7 +80,7 @@ def run_selection(
     Returns:
         (next_skills, roadmap)
     """
-    scores = compute_scores(G)
+    scores = compute_scores(G, weights)
     valid_skills = filter_valid_skills(G)
     next_skills = select_next_skills(scores, valid_skills, top_k)
     roadmap = build_roadmap(G, scores, valid_skills, reasoning)

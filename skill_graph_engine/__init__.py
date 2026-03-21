@@ -1,29 +1,26 @@
+from dataclasses import dataclass
 from skill_intelligence_service.models import SkillDNA
 
 from .graph import build_graph
-from .engine import run_selection, filter_valid_skills, compute_scores
-from .reasoning import generate_reasoning
+from .engine import run_selection, filter_valid_skills
+from .reasoning import generate_reasoning, infer_weights
 from .scorer import compute_scores
 from .models import LearningPath
+
+
+@dataclass
+class EngineResult:
+    learning_path: LearningPath
+    graph: object
+    scores: dict
+    weights: dict
 
 
 def run_engine(
     skill_dna: SkillDNA,
     proficiency: dict[str, float] | None = None,
     top_k: int = 3,
-) -> LearningPath:
-    """
-    Main entry point for the Skill Graph Decision Engine.
-
-    Args:
-        skill_dna:   Output from skill_intelligence_service (skills, importance, confidence)
-        proficiency: Output from skill_validation_service (skill -> proficiency score 0-1)
-                     Falls back to resume confidence, then 0.0 per design spec.
-        top_k:       Number of immediate next skills to recommend (default: 3)
-
-    Returns:
-        LearningPath with next_skills, roadmap, and reasoning
-    """
+) -> EngineResult:
     resolved_proficiency = _resolve_proficiency(skill_dna, proficiency)
 
     G = build_graph(
@@ -32,15 +29,26 @@ def run_engine(
         proficiency=resolved_proficiency,
     )
 
-    scores = compute_scores(G)
+    weights = infer_weights(
+        importance=skill_dna.importance,
+        confidence=skill_dna.confidence,
+        proficiency=resolved_proficiency,
+    )
+
+    scores = compute_scores(G, weights)
     valid_skills = filter_valid_skills(G)
     reasoning = generate_reasoning(G, scores, valid_skills)
-    next_skills, roadmap = run_selection(G, reasoning, top_k)
+    next_skills, roadmap = run_selection(G, reasoning, weights, top_k)
 
-    return LearningPath(
-        next_skills=next_skills,
-        roadmap=roadmap,
-        reasoning=reasoning,
+    return EngineResult(
+        learning_path=LearningPath(
+            next_skills=next_skills,
+            roadmap=roadmap,
+            reasoning=reasoning,
+        ),
+        graph=G,
+        scores=scores,
+        weights=weights,
     )
 
 

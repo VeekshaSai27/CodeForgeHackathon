@@ -6,13 +6,18 @@ def evaluate(questions, answers):
     correctness = []
 
     for q, ans in zip(questions, answers):
-        is_correct = ans == q["answer"]
+        q_type = q.get("type", "mcq")
+        if q_type == "coding":
+            # Coding: any non-empty submission counts as attempted (medium weight)
+            is_correct = bool(ans and ans.strip())
+        else:
+            is_correct = ans == q["answer"]
         correctness.append(1 if is_correct else 0)
 
         if is_correct:
-            score += weights[q["difficulty"]]
+            score += weights.get(q.get("difficulty", "medium"), 0.3)
         else:
-            concept = q["concept"]
+            concept = q.get("concept", "unknown")
             concept_errors[concept] = concept_errors.get(concept, 0) + 1
 
     proficiency = min(score, 1.0)

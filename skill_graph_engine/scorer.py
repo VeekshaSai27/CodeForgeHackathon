@@ -1,36 +1,46 @@
 import networkx as nx
 
-# Configurable weights
-ALPHA = 0.4  # importance
-BETA = 0.3   # gap (1 - proficiency)
-GAMMA = 0.2  # dependency centrality
-DELTA = 0.1  # confidence
+# Default fallback weights
+_DEFAULTS = {"alpha": 0.4, "beta": 0.3, "gamma": 0.2, "delta": 0.1}
 
 
-def compute_scores(G: nx.DiGraph) -> dict[str, float]:
+def compute_scores(
+    G: nx.DiGraph,
+    weights: dict[str, float] | None = None,
+) -> dict[str, float]:
     """
     Compute Skill Pressure Score for every node in the graph.
 
     Score = α·Importance + β·(1 - Proficiency) + γ·DependencyCentrality - δ·Confidence
 
+    Args:
+        G:       Skill dependency graph with node attributes
+        weights: Dict with keys alpha, beta, gamma, delta (inferred or default)
+
     Returns:
         dict mapping skill -> score (0.0 to 1.0)
     """
+    w = weights or _DEFAULTS
+    alpha = w.get("alpha", _DEFAULTS["alpha"])
+    beta  = w.get("beta",  _DEFAULTS["beta"])
+    gamma = w.get("gamma", _DEFAULTS["gamma"])
+    delta = w.get("delta", _DEFAULTS["delta"])
+
     centrality = _compute_centrality(G)
 
     scores = {}
     for skill in G.nodes:
         attrs = G.nodes[skill]
-        importance = attrs.get("importance", 0.5)
-        proficiency = attrs.get("proficiency", 0.0)
-        confidence = attrs.get("confidence", 0.0)
+        importance    = attrs.get("importance", 0.5)
+        proficiency   = attrs.get("proficiency", 0.0)
+        confidence    = attrs.get("confidence", 0.0)
         dep_centrality = centrality.get(skill, 0.0)
 
         raw = (
-            ALPHA * importance
-            + BETA * (1.0 - proficiency)
-            + GAMMA * dep_centrality
-            - DELTA * confidence
+            alpha * importance
+            + beta  * (1.0 - proficiency)
+            + gamma * dep_centrality
+            - delta * confidence
         )
 
         scores[skill] = round(max(0.0, min(1.0, raw)), 4)

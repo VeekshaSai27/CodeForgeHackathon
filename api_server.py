@@ -32,7 +32,7 @@ from skill_validation_service.services.question_generator import generate_questi
 from skill_validation_service.services.evaluation_engine import evaluate
 from skill_validation_service.services.confidence_engine import calculate_confidence
 from shared.gemini_pool import generate_with_retry
-from db import get_conn, persist_analysis, persist_assessment, persist_learning_path
+from db import get_conn, persist_analysis, persist_assessment, persist_skill_scores, persist_learning_path
 
 # ---------------------------------------------------------------------------
 # App + rate limiter
@@ -88,7 +88,8 @@ def analyze_profile():
 
     try:
         with get_conn() as conn:
-            persist_analysis(conn, skill_dna)
+            user_id = persist_analysis(conn, skill_dna, token)
+            session["user_id"] = user_id
     except Exception as e:
         app.logger.warning(f"DB persist_analysis failed: {e}")
 
@@ -129,12 +130,21 @@ def generate_test():
     flat: list[dict] = []
     for skill, qs in skill_questions.items():
         for i, q in enumerate(qs):
-            flat.append({
+            q_type = q.get("type", "mcq")
+            entry = {
                 "id": f"{skill}__{i}",
                 "skill": skill,
                 "question": q.get("question", ""),
                 "options": q.get("options", []),
-            })
+                "correct_answer": q.get("answer", ""),
+                "type": q.get("type", "mcq"),
+                "difficulty": q.get("difficulty", "medium"),
+                "concept": q.get("concept", skill),
+            }
+            if q_type == "coding":
+                entry["starterCode"] = q.get("starterCode", "")
+                entry["language"] = q.get("language", "javascript")
+            flat.append(entry)
 
     return jsonify(_session_response(token, {"questions": flat}))
 
@@ -176,8 +186,23 @@ def evaluate_test():
     session["proficiency"] = proficiency_map
 
     try:
-        with get_conn() as conn:
-            persist_assessment(conn, assessment_rows)
+        user_id = session.get("user_id")
+        if user_id:
+            # Annotate questions with user answers + correctness for persistence
+            annotated: dict[str, list] = {}
+            for skill, qs in skill_questions.items():
+                skill_ans = skill_answers.get(skill, [])
+                annotated_qs = []
+                for i, q in enumerate(qs):
+                    user_ans = skill_ans[i] if i < len(skill_ans) else None
+                    annotated_qs.append({
+                        **q,
+                        "user_answer": user_ans,
+                        "is_correct": user_ans == q.get("answer") if user_ans else False,
+                    })
+                annotated[skill] = annotated_qs
+            with get_conn() as conn:
+                persist_assessment(conn, user_id, assessment_rows, annotated)
     except Exception as e:
         app.logger.warning(f"DB persist_assessment failed: {e}")
 
@@ -203,7 +228,11 @@ def compute_path():
         or {}
     )
 
-    learning_path = run_engine(skill_dna=skill_dna, proficiency=proficiency)
+    result = run_engine(skill_dna=skill_dna, proficiency=proficiency)
+    learning_path = result.learning_path
+    G = result.graph
+    scores = result.scores
+    weights = result.weights
 
     next_set = set(learning_path.next_skills)
     path_items: list[dict] = []
@@ -226,8 +255,11 @@ def compute_path():
         })
 
     try:
-        with get_conn() as conn:
-            persist_learning_path(conn, path_items)
+        user_id = session.get("user_id")
+        if user_id:
+            with get_conn() as conn:
+                persist_skill_scores(conn, user_id, G, scores)
+                persist_learning_path(conn, user_id, path_items, weights)
     except Exception as e:
         app.logger.warning(f"DB persist_learning_path failed: {e}")
 

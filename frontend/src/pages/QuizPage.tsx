@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { CheckCircle2, Loader2, ArrowRight } from "lucide-react";
+import ReactMarkdown from "react-markdown";
 import { Button } from "@/components/ui/button";
 import { StepIndicator } from "@/components/StepIndicator";
 import { useOnboarding } from "@/context/OnboardingContext";
@@ -17,6 +18,7 @@ export default function QuizPage() {
   const [currentIdx, setCurrentIdx] = useState(0);
   const [answers, setAnswers] = useState<Record<string, string>>({});
   const [codeOutputs, setCodeOutputs] = useState<Record<string, string>>({});
+  const [codeRunning, setCodeRunning] = useState(false);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
@@ -43,8 +45,12 @@ export default function QuizPage() {
 
   const current = questions[currentIdx];
   const progress = questions.length ? ((currentIdx + 1) / questions.length) * 100 : 0;
-  const selectedAnswer = current ? answers[current.id] : undefined;
   const isLast = currentIdx === questions.length - 1;
+  const selectedAnswer = current ? answers[current.id] : undefined;
+  const isCoding = current?.type === "coding";
+  const canProceed = isCoding
+    ? !!(answers[current?.id ?? ""]?.trim())
+    : !!selectedAnswer;
 
   const selectOption = (option: string) => {
     if (!current) return;
@@ -56,11 +62,13 @@ export default function QuizPage() {
     setAnswers((prev) => ({ ...prev, [current.id]: code }));
   };
 
-  const handleRunCode = () => {
+  const handleRunCode = async () => {
     if (!current) return;
     const code = answers[current.id] ?? current.starterCode ?? "";
-    const output = runCode(code);
+    setCodeRunning(true);
+    const output = await runCode(code, current.language || "javascript");
     setCodeOutputs((prev) => ({ ...prev, [current.id]: output }));
+    setCodeRunning(false);
   };
 
   const handleNext = async () => {
@@ -128,9 +136,9 @@ export default function QuizPage() {
               <span className="mb-2 inline-block rounded-full bg-primary/10 px-2.5 py-0.5 text-xs font-medium text-primary">
                 {current.skill}
               </span>
-              <h2 className="text-balance mt-2 text-lg font-semibold text-foreground sm:text-xl" style={{ lineHeight: "1.25" }}>
-                {current.question}
-              </h2>
+              <div className="mt-2 text-lg font-semibold text-foreground sm:text-xl [&>p]:leading-snug [&>p]:my-0 [&_code]:rounded [&_code]:bg-muted [&_code]:px-1.5 [&_code]:py-0.5 [&_code]:text-sm [&_code]:font-mono [&_code]:text-foreground">
+                <ReactMarkdown>{current.question}</ReactMarkdown>
+              </div>
               {(!current.type || current.type === "mcq") && (
                 <div className="mt-6 space-y-3">
                   {current.options.map((opt) => {
@@ -153,7 +161,9 @@ export default function QuizPage() {
                           >
                             {selected && <CheckCircle2 className="h-3 w-3 text-primary-foreground" />}
                           </div>
-                          {opt}
+                          <span className="[&>p]:my-0 [&_code]:rounded [&_code]:bg-muted [&_code]:px-1 [&_code]:py-0.5 [&_code]:text-xs [&_code]:font-mono">
+                            <ReactMarkdown>{opt}</ReactMarkdown>
+                          </span>
                         </div>
                       </button>
                     );
@@ -173,8 +183,8 @@ export default function QuizPage() {
                     <span className="text-xs text-muted-foreground">
                       Language: {current.language || "javascript"}
                     </span>
-                    <Button type="button" variant="outline" size="sm" onClick={handleRunCode}>
-                      Run Code
+                    <Button type="button" variant="outline" size="sm" onClick={handleRunCode} disabled={codeRunning}>
+                      {codeRunning ? <><Loader2 className="mr-1 h-3 w-3 animate-spin" />Running…</> : "Run Code"}
                     </Button>
                   </div>
                   <div className="rounded-md border bg-muted/40 p-3">
@@ -190,7 +200,7 @@ export default function QuizPage() {
             <div className="mt-6 flex justify-end">
               <Button
                 onClick={handleNext}
-                disabled={!selectedAnswer || submitting}
+                disabled={!canProceed || submitting}
                 className="min-w-[140px] shadow-lg shadow-primary/20 active:scale-[0.97] disabled:shadow-none"
               >
                 {submitting ? (
