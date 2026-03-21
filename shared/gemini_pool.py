@@ -13,7 +13,10 @@ import time
 
 from google import genai
 from google.genai import types
-from google.api_core.exceptions import ResourceExhausted
+try:
+    from google.api_core.exceptions import ResourceExhausted
+except ImportError:
+    from google.genai.errors import ClientError as ResourceExhausted
 
 _lock = threading.Lock()
 _index = 0
